@@ -69,10 +69,15 @@ func (a *App) GetRoutes() []RouteInfo {
 	if err != nil {
 		return nil
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return parseRoutes(string(out))
+}
+
+// parseRoutes 解析 cftunnel list 输出
+func parseRoutes(output string) []RouteInfo {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
 	var routes []RouteInfo
 	for i, line := range lines {
-		if i == 0 { // 跳过表头
+		if i == 0 {
 			continue
 		}
 		fields := strings.Fields(line)

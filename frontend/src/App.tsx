@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import './style.css'
 import { CheckInstall, GetStatus, GetRoutes, TunnelUp, TunnelDown, RunCommand } from '../wailsjs/go/main/App'
+import { IconDashboard, IconZap, IconRoute, IconTerminal, IconAlert, IconPlay, IconStop, IconRefresh, IconPlus, IconTrash, IconSend } from './Icons'
 
 type Route = { name: string; hostname: string; service: string }
 type Page = 'dashboard' | 'quick' | 'routes' | 'terminal'
@@ -45,11 +46,11 @@ function App() {
 }
 
 function Sidebar({ page, setPage, version }: { page: Page; setPage: (p: Page) => void; version: string }) {
-  const items: { id: Page; icon: string; label: string }[] = [
-    { id: 'dashboard', icon: '📊', label: '仪表盘' },
-    { id: 'quick', icon: '⚡', label: '免域名模式' },
-    { id: 'routes', icon: '🔗', label: '路由管理' },
-    { id: 'terminal', icon: '💻', label: '终端' },
+  const items: { id: Page; icon: JSX.Element; label: string }[] = [
+    { id: 'dashboard', icon: <IconDashboard />, label: '仪表盘' },
+    { id: 'quick', icon: <IconZap />, label: '免域名模式' },
+    { id: 'routes', icon: <IconRoute />, label: '路由管理' },
+    { id: 'terminal', icon: <IconTerminal />, label: '终端' },
   ]
   return (
     <div className="sidebar">
@@ -69,7 +70,7 @@ function Sidebar({ page, setPage, version }: { page: Page; setPage: (p: Page) =>
 function NotInstalled() {
   return (
     <div className="empty">
-      <div className="empty-icon">⚠️</div>
+      <div className="empty-icon"><IconAlert /></div>
       <p>未检测到 cftunnel CLI</p>
       <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text2)' }}>
         请先安装: curl -fsSL https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.sh | bash
@@ -96,12 +97,12 @@ function Dashboard({ status, isRunning, routes, loading, setLoading, refresh }: 
         <div className="terminal" style={{ marginBottom: 16 }}>{status}</div>
         <div className="btn-group">
           <button className="btn btn-primary" onClick={handleUp} disabled={loading || isRunning}>
-            {loading ? <span className="spinner" /> : null} 启动
+            {loading ? <span className="spinner" /> : <IconPlay />} 启动
           </button>
           <button className="btn btn-danger" onClick={handleDown} disabled={loading || !isRunning}>
-            停止
+            <IconStop /> 停止
           </button>
-          <button className="btn btn-outline" onClick={refresh}>刷新</button>
+          <button className="btn btn-outline" onClick={refresh}><IconRefresh /> 刷新</button>
         </div>
       </div>
       <div className="card">
@@ -141,7 +142,7 @@ function QuickMode() {
         <div className="input-row" style={{ marginBottom: 16 }}>
           <input className="input" style={{ width: 120 }} value={port} onChange={e => setPort(e.target.value)} placeholder="端口" />
           <button className="btn btn-primary" onClick={start} disabled={running}>
-            {running ? <span className="spinner" /> : null} 启动隧道
+            {running ? <span className="spinner" /> : <IconZap size={16} />} 启动隧道
           </button>
         </div>
         {output && <div className="terminal">{output}</div>}
@@ -179,7 +180,7 @@ function Routes({ routes, refresh }: { routes: Route[]; refresh: () => Promise<v
           <input className="input" style={{ width: 120 }} value={name} onChange={e => setName(e.target.value)} placeholder="名称" />
           <input className="input" style={{ width: 80 }} value={port} onChange={e => setPort(e.target.value)} placeholder="端口" />
           <input className="input" style={{ flex: 1, minWidth: 200 }} value={domain} onChange={e => setDomain(e.target.value)} placeholder="域名 (如 app.example.com)" />
-          <button className="btn btn-primary" onClick={addRoute}>添加</button>
+          <button className="btn btn-primary" onClick={addRoute}><IconPlus /> 添加</button>
         </div>
         {output && <div className="terminal">{output}</div>}
       </div>
@@ -191,7 +192,7 @@ function Routes({ routes, refresh }: { routes: Route[]; refresh: () => Promise<v
             <tbody>{routes.map(r => (
               <tr key={r.name}>
                 <td>{r.name}</td><td>{r.hostname}</td><td>{r.service}</td>
-                <td><button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => removeRoute(r.name)}>删除</button></td>
+                <td><button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => removeRoute(r.name)}><IconTrash /> 删除</button></td>
               </tr>
             ))}</tbody>
           </table>
@@ -222,7 +223,7 @@ function Terminal() {
           <span style={{ color: 'var(--green)', fontFamily: 'monospace' }}>$</span>
           <input className="input" value={cmd} onChange={e => setCmd(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && run()} placeholder="status / list / up / down ..." />
-          <button className="btn btn-primary" onClick={run}>执行</button>
+          <button className="btn btn-primary" onClick={run}><IconSend /> 执行</button>
         </div>
       </div>
     </>
