@@ -1,5 +1,6 @@
 # cftunnel-app
 
+[![GitHub release](https://img.shields.io/github/v/release/qingchencloud/cftunnel-app)](https://github.com/qingchencloud/cftunnel-app/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **cftunnel 桌面客户端** — 基于 [Wails](https://wails.io) 构建的跨平台 GUI。
@@ -16,6 +17,16 @@
 ## 截图
 
 > 深色主题 · macOS 毛玻璃标题栏 · SVG 系统图标
+
+## 下载安装
+
+从 [GitHub Releases](https://github.com/qingchencloud/cftunnel-app/releases) 下载对应平台的安装包：
+
+| 平台 | 文件 |
+|------|------|
+| macOS | `cftunnel-app-macos.zip` |
+| Windows | `cftunnel-app-windows.zip` |
+| Linux | `cftunnel-app-linux.tar.gz` |
 
 ## 前置条件
 
@@ -82,7 +93,9 @@ go test -v ./...
 ## 关联项目
 
 - [cftunnel](https://github.com/qingchencloud/cftunnel) — CLI 工具（本客户端的核心依赖）
-- [cftunnel 官网](https://qingchencloud.github.io/cftunnel/) — 产品介绍页
+- [cftunnel 官网](https://cftunnel.qt.cool) — 产品介绍与下载
+- [社区讨论](https://linux.do/t/1636467) — Linux.do 讨论帖
+- [QQ 交流群](https://qm.qq.com/q/qUfdR0jJVS) — OpenClaw 交流群
 
 ## License
 
