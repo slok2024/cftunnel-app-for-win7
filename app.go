@@ -42,34 +42,42 @@ type QuickResult struct {
 	Err string `json:"err"`
 }
 
+// runCftunnel 执行 cftunnel 子命令（Windows 隐藏窗口）
+func runCftunnel(args ...string) (string, error) {
+	cmd := exec.Command("cftunnel", args...)
+	hideWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
 // CheckInstall 检查 cftunnel 是否已安装
 func (a *App) CheckInstall() StatusInfo {
-	out, err := exec.Command("cftunnel", "version").CombinedOutput()
+	out, err := runCftunnel("version")
 	if err != nil {
 		return StatusInfo{Installed: false}
 	}
 	return StatusInfo{
 		Installed: true,
-		Version:   strings.TrimSpace(string(out)),
+		Version:   strings.TrimSpace(out),
 	}
 }
 
 // GetStatus 获取隧道状态
 func (a *App) GetStatus() string {
-	out, err := exec.Command("cftunnel", "status").CombinedOutput()
+	out, err := runCftunnel("status")
 	if err != nil {
 		return "未初始化"
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(out)
 }
 
 // GetRoutes 获取路由列表
 func (a *App) GetRoutes() []RouteInfo {
-	out, err := exec.Command("cftunnel", "list").CombinedOutput()
+	out, err := runCftunnel("list")
 	if err != nil {
 		return nil
 	}
-	return parseRoutes(string(out))
+	return parseRoutes(out)
 }
 
 // parseRoutes 解析 cftunnel list 输出
@@ -94,9 +102,8 @@ func parseRoutes(output string) []RouteInfo {
 
 // StartQuick 启动免域名模式
 func (a *App) StartQuick(port string) QuickResult {
-	out, err := runWithTimeout("cftunnel", "quick", port)
+	out, err := runCftunnel("quick", port)
 	if err != nil {
-		// quick 模式是前台阻塞的，这里用后台方式
 		return QuickResult{Err: err.Error()}
 	}
 	return QuickResult{URL: extractTunnelURL(out)}
@@ -104,30 +111,30 @@ func (a *App) StartQuick(port string) QuickResult {
 
 // TunnelUp 启动隧道
 func (a *App) TunnelUp() string {
-	out, err := exec.Command("cftunnel", "up").CombinedOutput()
+	out, err := runCftunnel("up")
 	if err != nil {
-		return fmt.Sprintf("错误: %s", string(out))
+		return fmt.Sprintf("错误: %s", out)
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(out)
 }
 
 // TunnelDown 停止隧道
 func (a *App) TunnelDown() string {
-	out, err := exec.Command("cftunnel", "down").CombinedOutput()
+	out, err := runCftunnel("down")
 	if err != nil {
-		return fmt.Sprintf("错误: %s", string(out))
+		return fmt.Sprintf("错误: %s", out)
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(out)
 }
 
 // RunCommand 通用命令执行（前端可调用任意 cftunnel 子命令）
 func (a *App) RunCommand(args string) string {
 	parts := strings.Fields(args)
-	out, err := exec.Command("cftunnel", parts...).CombinedOutput()
+	out, err := runCftunnel(parts...)
 	if err != nil {
-		return fmt.Sprintf("错误: %s\n%s", err, string(out))
+		return fmt.Sprintf("错误: %s\n%s", err, out)
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(out)
 }
 
 // SelectDirectory 打开目录选择对话框
@@ -139,11 +146,6 @@ func (a *App) SelectDirectory() string {
 		return ""
 	}
 	return dir
-}
-
-func runWithTimeout(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).CombinedOutput()
-	return string(out), err
 }
 
 func extractTunnelURL(output string) string {
