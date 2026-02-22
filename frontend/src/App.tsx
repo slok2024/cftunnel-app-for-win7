@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import './style.css'
 import { CheckInstall, GetStatus, GetRoutes, TunnelUp, TunnelDown, RunCommand } from '../wailsjs/go/main/App'
-import { IconDashboard, IconZap, IconRoute, IconTerminal, IconAlert, IconPlay, IconStop, IconRefresh, IconPlus, IconTrash, IconSend } from './Icons'
+import { IconDashboard, IconZap, IconRoute, IconTerminal, IconAlert, IconPlay, IconStop, IconRefresh, IconPlus, IconTrash, IconSend, IconClear } from './Icons'
 
 type Route = { name: string; hostname: string; service: string }
 type Page = 'dashboard' | 'quick' | 'routes' | 'terminal'
@@ -206,25 +206,75 @@ function Terminal() {
   const [cmd, setCmd] = useState('')
   const [output, setOutput] = useState('欢迎使用 cftunnel 终端\n输入命令（不需要 cftunnel 前缀）\n')
 
-  const run = async () => {
-    if (!cmd.trim()) return
-    setOutput(prev => prev + `\n$ cftunnel ${cmd}\n`)
-    const result = await RunCommand(cmd)
+  const run = async (c?: string) => {
+    const command = c || cmd.trim()
+    if (!command) return
+    setOutput(prev => prev + `\n$ cftunnel ${command}\n`)
+    const result = await RunCommand(command)
     setOutput(prev => prev + result + '\n')
     setCmd('')
   }
+
+  const presets = [
+    { label: '查看状态', cmd: 'status' },
+    { label: '路由列表', cmd: 'list' },
+    { label: '启动隧道', cmd: 'up' },
+    { label: '停止隧道', cmd: 'down' },
+    { label: '查看版本', cmd: 'version' },
+    { label: '查看日志', cmd: 'logs' },
+  ]
+
+  const commands = [
+    { cmd: 'quick <端口>', desc: '免域名模式，生成临时公网地址' },
+    { cmd: 'init', desc: '配置 API Token 和账户 ID' },
+    { cmd: 'create <名称>', desc: '创建隧道' },
+    { cmd: 'add <名称> <端口> --domain <域名>', desc: '添加路由' },
+    { cmd: 'remove <名称>', desc: '删除路由' },
+    { cmd: 'list', desc: '列出所有路由' },
+    { cmd: 'up / down', desc: '启动 / 停止隧道' },
+    { cmd: 'status', desc: '查看隧道状态' },
+    { cmd: 'install / uninstall', desc: '注册 / 卸载系统服务' },
+    { cmd: 'destroy', desc: '删除隧道 + 清理 DNS' },
+    { cmd: 'update', desc: '自动更新 cftunnel' },
+  ]
 
   return (
     <>
       <div className="page-title">终端</div>
       <div className="card">
-        <div className="terminal" style={{ maxHeight: 400, marginBottom: 12 }}>{output}</div>
-        <div className="input-row">
-          <span style={{ color: 'var(--green)', fontFamily: 'monospace' }}>$</span>
-          <input className="input" value={cmd} onChange={e => setCmd(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && run()} placeholder="status / list / up / down ..." />
-          <button className="btn btn-primary" onClick={run}><IconSend /> 执行</button>
+        <div className="card-title">快捷命令</div>
+        <div className="btn-group" style={{ marginBottom: 16 }}>
+          {presets.map(p => (
+            <button key={p.cmd} className="btn btn-outline" style={{ padding: '6px 14px', fontSize: 13 }} onClick={() => run(p.cmd)}>
+              {p.label}
+            </button>
+          ))}
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 13, color: 'var(--text2)' }}>输出</span>
+          <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: 12 }}
+            onClick={() => setOutput('')}><IconClear /> 清屏</button>
+        </div>
+        <div className="terminal" style={{ maxHeight: 300, marginBottom: 12 }}>{output}</div>
+        <div className="input-row">
+          <span style={{ color: 'var(--green)', fontFamily: 'monospace', fontWeight: 700 }}>$</span>
+          <input className="input" value={cmd} onChange={e => setCmd(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && run()} placeholder="输入命令，如 status、list、up ..." />
+          <button className="btn btn-primary" onClick={() => run()}><IconSend /> 执行</button>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-title">命令参考</div>
+        <table className="route-table">
+          <thead><tr><th>命令</th><th>说明</th></tr></thead>
+          <tbody>{commands.map(c => (
+            <tr key={c.cmd} style={{ cursor: 'pointer' }} onClick={() => setCmd(c.cmd.split(' /')[0])}>
+              <td style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--accent2)' }}>{c.cmd}</td>
+              <td>{c.desc}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text2)' }}>点击命令行可快速填入输入框</p>
       </div>
     </>
   )
