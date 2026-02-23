@@ -3,3 +3,6 @@ node_modules
 frontend/dist
 frontend/wailsjs
 .DS_Store
+
+# AI 提示词（本地）
+.claude/
