@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -18,7 +22,10 @@ var AppVersion = "dev"
 
 // App 桌面客户端主结构
 type App struct {
-	ctx context.Context
+	ctx     context.Context
+	quickMu sync.Mutex
+	quickCmd *exec.Cmd
+	quickURL string
 }
 
 func NewApp() *App {
@@ -49,9 +56,39 @@ type QuickResult struct {
 	Err string `json:"err"`
 }
 
+// cftunnelBin 缓存 cftunnel 可执行文件路径
+var cftunnelBin string
+
+// findCftunnel 查找 cftunnel 可执行文件路径
+func findCftunnel() string {
+	if cftunnelBin != "" {
+		return cftunnelBin
+	}
+	// 优先 PATH 查找
+	if p, err := exec.LookPath("cftunnel"); err == nil {
+		cftunnelBin = p
+		return p
+	}
+	// GUI 启动时 PATH 可能不完整，尝试常见路径
+	home, _ := os.UserHomeDir()
+	candidates := []string{
+		home + "/bin/cftunnel",
+		"/usr/local/bin/cftunnel",
+		"/opt/homebrew/bin/cftunnel",
+		home + "/.cftunnel/cftunnel",
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			cftunnelBin = p
+			return p
+		}
+	}
+	return "cftunnel"
+}
+
 // runCftunnel 执行 cftunnel 子命令（Windows 隐藏窗口）
 func runCftunnel(args ...string) (string, error) {
-	cmd := exec.Command("cftunnel", args...)
+	cmd := exec.Command(findCftunnel(), args...)
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -107,13 +144,180 @@ func parseRoutes(output string) []RouteInfo {
 	return routes
 }
 
-// StartQuick 启动免域名模式
+// StartQuick 启动免域名模式（后台运行，立即返回）
 func (a *App) StartQuick(port string) QuickResult {
-	out, err := runCftunnel("quick", port)
-	if err != nil {
-		return QuickResult{Err: err.Error()}
+	a.quickMu.Lock()
+	// 检查是否已在运行
+	if a.quickCmd != nil && a.quickCmd.Process != nil {
+		a.quickMu.Unlock()
+		return QuickResult{Err: "隧道已在运行，请先停止"}
 	}
-	return QuickResult{URL: extractTunnelURL(out)}
+	a.quickMu.Unlock()
+
+	// 查找 cloudflared 路径
+	binPath, err := exec.LookPath("cloudflared")
+	if err != nil {
+		home, _ := os.UserHomeDir()
+		binPath = home + "/.cftunnel/cloudflared"
+		if _, err := os.Stat(binPath); err != nil {
+			return QuickResult{Err: "未找到 cloudflared，请先执行 cftunnel install"}
+		}
+	}
+
+	cmd := exec.Command(binPath, "tunnel", "--url", "http://localhost:"+port)
+	hideWindow(cmd)
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return QuickResult{Err: "创建管道失败: " + err.Error()}
+	}
+
+	if err := cmd.Start(); err != nil {
+		return QuickResult{Err: "启动失败: " + err.Error()}
+	}
+
+	a.quickMu.Lock()
+	a.quickCmd = cmd
+	a.quickURL = ""
+	a.quickMu.Unlock()
+
+	// 保存 PID
+	pidPath := quickPIDPath()
+	home, _ := os.UserHomeDir()
+	os.MkdirAll(home+"/.cftunnel", 0700)
+	os.WriteFile(pidPath, []byte(strconv.Itoa(cmd.Process.Pid)), 0600)
+
+	// 异步提取域名
+	go a.scanQuickURL(stderr)
+
+	// 异步等待进程退出，清理状态
+	go func() {
+		cmd.Wait()
+		a.quickMu.Lock()
+		a.quickCmd = nil
+		a.quickURL = ""
+		a.quickMu.Unlock()
+		os.Remove(pidPath)
+		os.Remove(quickURLPath())
+	}()
+
+	// 等待域名提取（最多 5 秒，前端会继续轮询）
+	for i := 0; i < 10; i++ {
+		time.Sleep(500 * time.Millisecond)
+		a.quickMu.Lock()
+		url := a.quickURL
+		a.quickMu.Unlock()
+		if url != "" {
+			return QuickResult{URL: url}
+		}
+		a.quickMu.Lock()
+		dead := a.quickCmd == nil
+		a.quickMu.Unlock()
+		if dead {
+			return QuickResult{Err: "cloudflared 启动后异常退出"}
+		}
+	}
+
+	return QuickResult{URL: ""}
+}
+
+// quickURLPath 返回 URL 持久化文件路径
+func quickURLPath() string {
+	home, _ := os.UserHomeDir()
+	return home + "/.cftunnel/quick.url"
+}
+
+// quickPIDPath 返回免域名模式专用 PID 文件路径（与自有域名模式的 cloudflared.pid 隔离）
+func quickPIDPath() string {
+	home, _ := os.UserHomeDir()
+	return home + "/.cftunnel/quick.pid"
+}
+
+// scanQuickURL 从 stderr 提取 trycloudflare.com 域名
+func (a *App) scanQuickURL(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "trycloudflare.com") {
+			url := extractTunnelURL(line + "\n")
+			if url != "" {
+				a.quickMu.Lock()
+				a.quickURL = url
+				a.quickMu.Unlock()
+				// 持久化到文件，app 重启后仍可读取
+				os.WriteFile(quickURLPath(), []byte(url), 0600)
+			}
+		}
+	}
+}
+
+// QuickStop 停止免域名模式
+func (a *App) QuickStop() string {
+	a.quickMu.Lock()
+	cmd := a.quickCmd
+	a.quickMu.Unlock()
+
+	// 清理持久化文件
+	os.Remove(quickURLPath())
+
+	if cmd != nil && cmd.Process != nil {
+		// app 内启动的进程，直接杀
+		if err := quickProcessKill(cmd.Process.Pid); err != nil {
+			return "停止失败: " + err.Error()
+		}
+		return "隧道已停止"
+	}
+
+	// 非 app 启动的，通过 quick.pid 文件杀进程
+	pidData, err := os.ReadFile(quickPIDPath())
+	if err != nil {
+		return "未找到运行中的免域名隧道"
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+	if err != nil {
+		return "PID 文件异常"
+	}
+	if err := quickProcessKill(pid); err != nil {
+		return "停止失败: " + err.Error()
+	}
+	os.Remove(quickPIDPath())
+	return "隧道已停止"
+}
+
+// QuickRunning 检查免域名模式是否在运行
+func (a *App) QuickRunning() bool {
+	a.quickMu.Lock()
+	running := a.quickCmd != nil
+	a.quickMu.Unlock()
+	if running {
+		return true
+	}
+	// 检查 quick 模式专用 PID 文件
+	pidData, err := os.ReadFile(quickPIDPath())
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+	if err != nil {
+		return false
+	}
+	return quickProcessAlive(pid)
+}
+
+// QuickURL 获取当前免域名模式的域名
+func (a *App) QuickURL() string {
+	a.quickMu.Lock()
+	u := a.quickURL
+	a.quickMu.Unlock()
+	if u != "" {
+		return u
+	}
+	// 兜底：从持久化文件读取（app 重启或 CLI 启动的场景）
+	data, err := os.ReadFile(quickURLPath())
+	if err == nil && len(data) > 0 {
+		return strings.TrimSpace(string(data))
+	}
+	return ""
 }
 
 // TunnelUp 启动隧道
@@ -284,9 +488,14 @@ func (a *App) GetRelayLogs() string {
 	return strings.TrimSpace(out)
 }
 
-// RelayServerSetup 远程部署 frps 服务端（仅支持密钥认证）
-func (a *App) RelayServerSetup(host string, port int, user, keyPath string, frpsPort int) string {
-	args := []string{"relay", "server", "setup", "--host", host, "-p", fmt.Sprintf("%d", port), "--user", user, "--key", keyPath, "--frps-port", fmt.Sprintf("%d", frpsPort)}
+// RelayServerSetup 远程部署 frps 服务端（支持密钥或密码认证）
+func (a *App) RelayServerSetup(host string, port int, user, keyPath, password string, frpsPort int) string {
+	args := []string{"relay", "server", "setup", "--host", host, "-p", fmt.Sprintf("%d", port), "--user", user, "--frps-port", fmt.Sprintf("%d", frpsPort)}
+	if password != "" {
+		args = append(args, "--pass", password)
+	} else if keyPath != "" {
+		args = append(args, "--key", keyPath)
+	}
 	out, err := runCftunnel(args...)
 	if err != nil {
 		return fmt.Sprintf("错误: %s\n%s", err, out)

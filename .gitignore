@@ -6,3 +6,4 @@ frontend/wailsjs
 
 # AI 提示词（本地）
 .claude/
+cftunnel-app

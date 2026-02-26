@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import './style.css'
-import { CheckInstall, GetStatus, GetRoutes, TunnelUp, TunnelDown, RunCommand, GetRelayStatus, GetRelayRules, RelayUp, RelayDown, RelayAddRule, RelayRemoveRule, RelayInit, RelayInstallService, RelayUninstallService, GetRelayLogs, RelayServerSetup, SelectDirectory, RelayCheck, GetAppVersion, CheckAppUpdate } from '../wailsjs/go/main/App'
+import { CheckInstall, GetStatus, GetRoutes, TunnelUp, TunnelDown, RunCommand, GetRelayStatus, GetRelayRules, RelayUp, RelayDown, RelayAddRule, RelayRemoveRule, RelayInit, RelayInstallService, RelayUninstallService, GetRelayLogs, RelayServerSetup, SelectDirectory, RelayCheck, GetAppVersion, CheckAppUpdate, StartQuick, QuickStop, QuickRunning, QuickURL } from '../wailsjs/go/main/App'
 import { IconDashboard, IconZap, IconRoute, IconTerminal, IconAlert, IconPlay, IconStop, IconRefresh, IconPlus, IconTrash, IconSend, IconClear, IconRelay, IconServer, IconLog, IconSetup, IconInfo } from './Icons'
 import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
 
@@ -56,7 +56,7 @@ function App() {
     if (!installed) return <NotInstalled />
     switch (page) {
       case 'dashboard': return <Dashboard status={status} isRunning={isRunning} routes={routes} loading={loading} setLoading={setLoading} refresh={refresh} />
-      case 'quick': return <QuickMode isRunning={isRunning} refresh={refresh} />
+      case 'quick': return <QuickMode />
       case 'routes': return <Routes routes={routes} refresh={refresh} />
       case 'relay-dashboard': return <RelayDashboard status={relayStatus} rules={relayRules} loading={loading} setLoading={setLoading} refresh={refresh} />
       case 'relay-rules': return <RelayRules rules={relayRules} refresh={refresh} />
@@ -157,26 +157,63 @@ function Dashboard({ status, isRunning, routes, loading, setLoading, refresh }: 
   )
 }
 
-function QuickMode({ isRunning, refresh }: { isRunning: boolean; refresh: () => Promise<void> }) {
+function QuickMode() {
   const [port, setPort] = useState('3000')
-  const [output, setOutput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [url, setUrl] = useState('')
+  const [error, setError] = useState('')
+
+  const checkStatus = useCallback(async () => {
+    const r = await QuickRunning()
+    setRunning(r)
+    if (r) {
+      const u = await QuickURL()
+      if (u) setUrl(u)
+    } else {
+      setUrl('')
+    }
+  }, [])
+
+  useEffect(() => { checkStatus() }, [checkStatus])
 
   const start = async () => {
     setLoading(true)
-    setOutput('正在启动免域名隧道...\n')
-    const result = await RunCommand(`quick ${port}`)
-    setOutput(result)
-    await refresh()
+    setError('')
+    setUrl('')
+    const result = await StartQuick(port)
+    if (result.err) {
+      setError(result.err)
+      setLoading(false)
+      return
+    }
+    if (result.url) {
+      setUrl(result.url)
+    }
+    await checkStatus()
     setLoading(false)
+    // 如果启动成功但还没拿到 URL，自动轮询
+    if (!result.url) {
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 1000))
+        const u = await QuickURL()
+        if (u) { setUrl(u); break }
+        const r2 = await QuickRunning()
+        if (!r2) { setError('cloudflared 启动后异常退出'); break }
+      }
+    }
   }
 
   const stop = async () => {
     setLoading(true)
-    const result = await TunnelDown()
-    setOutput(result)
-    await refresh()
+    setError('')
+    await QuickStop()
+    await checkStatus()
     setLoading(false)
+  }
+
+  const copyUrl = () => {
+    if (url) navigator.clipboard.writeText(url)
   }
 
   return (
@@ -185,19 +222,49 @@ function QuickMode({ isRunning, refresh }: { isRunning: boolean; refresh: () => 
       <div className="card">
         <div className="card-title">快速启动</div>
         <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16 }}>
-          零配置生成 *.trycloudflare.com 临时公网地址
+          零配置生成 *.trycloudflare.com 临时公网地址，后台持续运行直到手动停止
         </p>
         <div className="input-row" style={{ marginBottom: 16 }}>
-          <input className="input" style={{ width: 120 }} value={port} onChange={e => setPort(e.target.value)} placeholder="端口" disabled={isRunning} />
-          <button className="btn btn-primary" onClick={start} disabled={loading || isRunning}>
-            {loading ? <span className="spinner" /> : <IconZap size={16} />} 启动隧道
+          <input className="input" style={{ width: 120 }} value={port}
+            onChange={e => setPort(e.target.value)} placeholder="端口" disabled={running} />
+          <button className="btn btn-primary" onClick={start} disabled={loading || running}>
+            {loading && !running ? <span className="spinner" /> : <IconZap size={16} />} 启动
           </button>
-          <button className="btn btn-danger" onClick={stop} disabled={loading || !isRunning}>
-            <IconStop /> 停止
+          <button className="btn btn-danger" onClick={stop} disabled={loading || !running}>
+            {loading && running ? <span className="spinner" /> : <IconStop />} 停止
           </button>
+          <button className="btn btn-outline" onClick={checkStatus}><IconRefresh /> 刷新</button>
         </div>
-        {isRunning && <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>隧道运行中</div>}
-        {output && <div className="terminal">{output}</div>}
+        {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
+      </div>
+      {/* 运行状态卡片 */}
+      <div className="card">
+        <div className="card-title">运行状态</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <span className={`status-dot ${running ? 'running' : 'stopped'}`} />
+          <span>{running ? '隧道运行中' : '未运行'}</span>
+        </div>
+        {running && url && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>公网地址</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <code style={{ flex: 1, padding: '8px 12px', background: 'var(--bg2)', borderRadius: 6,
+                fontSize: 13, color: 'var(--accent2)', wordBreak: 'break-all' }}>{url}</code>
+              <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: 12 }}
+                onClick={copyUrl}>复制</button>
+              <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: 12 }}
+                onClick={() => BrowserOpenURL(url)}>打开</button>
+            </div>
+          </div>
+        )}
+        {running && !url && (
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="spinner" />
+            <span style={{ fontSize: 13, color: 'var(--text2)' }}>域名获取中，请稍候...</span>
+            <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: 12 }}
+              onClick={checkStatus}><IconRefresh /> 刷新</button>
+          </div>
+        )}
       </div>
     </>
   )
@@ -513,7 +580,9 @@ function RelaySetupPage() {
   const [host, setHost] = useState('')
   const [port, setPort] = useState('22')
   const [user, setUser] = useState('root')
+  const [authType, setAuthType] = useState<'key' | 'password'>('key')
   const [keyPath, setKeyPath] = useState('')
+  const [password, setPassword] = useState('')
   const [frpsPort, setFrpsPort] = useState('7000')
   const [output, setOutput] = useState('')
   const [deploying, setDeploying] = useState(false)
@@ -523,11 +592,15 @@ function RelaySetupPage() {
     if (dir) setKeyPath(dir)
   }
 
+  const canDeploy = host && (authType === 'key' ? keyPath : password)
+
   const deploy = async () => {
-    if (!host || !keyPath) return
+    if (!canDeploy) return
     setDeploying(true)
     setOutput('正在连接服务器并部署 frps ...\n')
-    const result = await RelayServerSetup(host, parseInt(port), user, keyPath, parseInt(frpsPort))
+    const key = authType === 'key' ? keyPath : ''
+    const pass = authType === 'password' ? password : ''
+    const result = await RelayServerSetup(host, parseInt(port), user, key, pass, parseInt(frpsPort))
     setOutput(result)
     setDeploying(false)
   }
@@ -547,15 +620,32 @@ function RelaySetupPage() {
           </div>
           <div className="input-row">
             <input className="input" style={{ width: 120 }} value={user} onChange={e => setUser(e.target.value)} placeholder="用户名" />
-            <input className="input" style={{ flex: 1 }} value={keyPath} onChange={e => setKeyPath(e.target.value)} placeholder="SSH 私钥路径 (如 ~/.ssh/id_rsa)" />
-            <button className="btn btn-outline" onClick={selectKey}>选择</button>
           </div>
+          <div className="input-row">
+            <span style={{ fontSize: 13, color: 'var(--text2)', minWidth: 60 }}>认证方式</span>
+            <button className={`btn ${authType === 'key' ? 'btn-primary' : 'btn-outline'}`}
+              style={{ padding: '4px 12px', fontSize: 12 }}
+              onClick={() => setAuthType('key')}>SSH 密钥</button>
+            <button className={`btn ${authType === 'password' ? 'btn-primary' : 'btn-outline'}`}
+              style={{ padding: '4px 12px', fontSize: 12 }}
+              onClick={() => setAuthType('password')}>密码</button>
+          </div>
+          {authType === 'key' ? (
+            <div className="input-row">
+              <input className="input" style={{ flex: 1 }} value={keyPath} onChange={e => setKeyPath(e.target.value)} placeholder="SSH 私钥路径 (如 ~/.ssh/id_rsa)" />
+              <button className="btn btn-outline" onClick={selectKey}>选择</button>
+            </div>
+          ) : (
+            <div className="input-row">
+              <input className="input" type="password" style={{ flex: 1 }} value={password} onChange={e => setPassword(e.target.value)} placeholder="SSH 密码" />
+            </div>
+          )}
           <div className="input-row">
             <input className="input" style={{ width: 120 }} value={frpsPort} onChange={e => setFrpsPort(e.target.value)} placeholder="frps 端口" />
             <span style={{ fontSize: 13, color: 'var(--text2)' }}>frps 监听端口 (默认 7000)</span>
           </div>
         </div>
-        <button className="btn btn-primary" onClick={deploy} disabled={deploying || !host || !keyPath}>
+        <button className="btn btn-primary" onClick={deploy} disabled={deploying || !canDeploy}>
           {deploying ? <span className="spinner" /> : <IconSetup />} 开始部署
         </button>
       </div>
