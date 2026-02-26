@@ -56,7 +56,7 @@ function App() {
     if (!installed) return <NotInstalled />
     switch (page) {
       case 'dashboard': return <Dashboard status={status} isRunning={isRunning} routes={routes} loading={loading} setLoading={setLoading} refresh={refresh} />
-      case 'quick': return <QuickMode />
+      case 'quick': return <QuickMode isRunning={isRunning} refresh={refresh} />
       case 'routes': return <Routes routes={routes} refresh={refresh} />
       case 'relay-dashboard': return <RelayDashboard status={relayStatus} rules={relayRules} loading={loading} setLoading={setLoading} refresh={refresh} />
       case 'relay-rules': return <RelayRules rules={relayRules} refresh={refresh} />
@@ -157,17 +157,26 @@ function Dashboard({ status, isRunning, routes, loading, setLoading, refresh }: 
   )
 }
 
-function QuickMode() {
+function QuickMode({ isRunning, refresh }: { isRunning: boolean; refresh: () => Promise<void> }) {
   const [port, setPort] = useState('3000')
   const [output, setOutput] = useState('')
-  const [running, setRunning] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const start = async () => {
-    setRunning(true)
+    setLoading(true)
     setOutput('正在启动免域名隧道...\n')
     const result = await RunCommand(`quick ${port}`)
     setOutput(result)
-    setRunning(false)
+    await refresh()
+    setLoading(false)
+  }
+
+  const stop = async () => {
+    setLoading(true)
+    const result = await TunnelDown()
+    setOutput(result)
+    await refresh()
+    setLoading(false)
   }
 
   return (
@@ -179,11 +188,15 @@ function QuickMode() {
           零配置生成 *.trycloudflare.com 临时公网地址
         </p>
         <div className="input-row" style={{ marginBottom: 16 }}>
-          <input className="input" style={{ width: 120 }} value={port} onChange={e => setPort(e.target.value)} placeholder="端口" />
-          <button className="btn btn-primary" onClick={start} disabled={running}>
-            {running ? <span className="spinner" /> : <IconZap size={16} />} 启动隧道
+          <input className="input" style={{ width: 120 }} value={port} onChange={e => setPort(e.target.value)} placeholder="端口" disabled={isRunning} />
+          <button className="btn btn-primary" onClick={start} disabled={loading || isRunning}>
+            {loading ? <span className="spinner" /> : <IconZap size={16} />} 启动隧道
+          </button>
+          <button className="btn btn-danger" onClick={stop} disabled={loading || !isRunning}>
+            <IconStop /> 停止
           </button>
         </div>
+        {isRunning && <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>隧道运行中</div>}
         {output && <div className="terminal">{output}</div>}
       </div>
     </>
