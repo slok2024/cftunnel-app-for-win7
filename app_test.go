@@ -63,3 +63,74 @@ func TestParseRoutesFields(t *testing.T) {
 		t.Errorf("Service = %q, want %q", r.Service, "http://localhost:3000")
 	}
 }
+
+// ==================== Relay 解析测试 ====================
+
+func TestParseRelayStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		running bool
+		server  string
+		rules   int
+	}{
+		{"运行中", "服务器: 1.2.3.4:7000\n状态:   运行中 (PID: 12345)\n规则数: 3", true, "1.2.3.4:7000", 3},
+		{"未运行", "服务器: 1.2.3.4:7000\n状态:   未运行\n规则数: 0", false, "1.2.3.4:7000", 0},
+		{"空输出", "", false, "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := parseRelayStatus(tt.input)
+			if info.Running != tt.running {
+				t.Errorf("Running = %v, want %v", info.Running, tt.running)
+			}
+			if info.Server != tt.server {
+				t.Errorf("Server = %q, want %q", info.Server, tt.server)
+			}
+			if info.Rules != tt.rules {
+				t.Errorf("Rules = %d, want %d", info.Rules, tt.rules)
+			}
+		})
+	}
+}
+
+func TestParseRelayRules(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect int
+	}{
+		{"正常表格", "名称\t协议\t本地端口\t远程端口\t域名\n----\t----\t--------\t--------\t----\nmc\ttcp\t25565\t25565\t-\nssh\ttcp\t22\t6022\t-", 2},
+		{"空规则", "暂无中继规则", 0},
+		{"单条规则", "名称\t协议\t本地端口\t远程端口\t域名\n----\t----\t--------\t--------\t----\nweb\thttp\t3000\t-\texample.com", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rules := parseRelayRules(tt.input)
+			if len(rules) != tt.expect {
+				t.Errorf("parseRelayRules() got %d rules, want %d", len(rules), tt.expect)
+			}
+		})
+	}
+}
+
+func TestParseRelayRulesFields(t *testing.T) {
+	input := "名称\t协议\t本地端口\t远程端口\t域名\n----\t----\t--------\t--------\t----\nmc\ttcp\t25565\t25565\t-"
+	rules := parseRelayRules(input)
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rules))
+	}
+	r := rules[0]
+	if r.Name != "mc" {
+		t.Errorf("Name = %q, want %q", r.Name, "mc")
+	}
+	if r.Proto != "tcp" {
+		t.Errorf("Proto = %q, want %q", r.Proto, "tcp")
+	}
+	if r.LocalPort != 25565 {
+		t.Errorf("LocalPort = %d, want %d", r.LocalPort, 25565)
+	}
+	if r.RemotePort != 25565 {
+		t.Errorf("RemotePort = %d, want %d", r.RemotePort, 25565)
+	}
+}
