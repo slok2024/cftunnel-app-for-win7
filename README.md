@@ -1,113 +1,15 @@
-# cftunnel-app
+这个项目本质上是一个基于 Go 语言和 Wails 框架开发的 Cloudflare Tunnel 桌面管理客户端。
 
-[![GitHub release](https://img.shields.io/github/v/release/qingchencloud/cftunnel-app)](https://github.com/qingchencloud/cftunnel-app/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+它将复杂的命令行操作封装成了直观、简洁的 Windows 桌面应用，旨在为用户提供“一键式”的内网穿透解决方案。
 
-**cftunnel 桌面客户端** — 基于 [Wails](https://wails.io) 构建的跨平台 GUI。
+通过 AI 修改官方代码，将程序做成绿色版；
 
-[cftunnel CLI](https://github.com/qingchencloud/cftunnel) 的可视化管理界面，让 Cloudflare Tunnel 内网穿透操作更直观。
+编译支持win7版本的内核及主程序；
 
-## 功能
+集成cftunnel.exe和cloudflared.exe和frpc.exe三个内核文件；
 
-- **仪表盘** — 隧道状态一目了然，一键启停
-- **免域名模式** — 输入端口即可生成 `*.trycloudflare.com` 临时公网地址
-- **路由管理** — 可视化添加/删除路由，自动创建 DNS 记录
-- **中继面板** — Relay 模式服务器配置、启停控制、系统服务注册
-- **规则管理** — 可视化添加/删除中继穿透规则，支持 TCP/UDP/HTTP
-- **链路检测** — 一键检测服务器连通性、本地服务、远程穿透端口状态和延迟
-- **中继日志** — 实时查看 frpc 运行日志
-- **服务端部署** — SSH 远程一键部署 frps 服务端
-- **内置终端** — 直接执行 cftunnel 子命令，快捷命令 + 命令参考
-- **关于页面** — 项目信息、关联项目、联系方式、客户端更新检测
-- **外部链接** — 点击链接自动用系统浏览器打开
+删除掉官方的下载内核逻辑；
 
-## 截图
+修复官方一处停止临时隧道 bug；
 
-> 深色主题 · macOS 毛玻璃标题栏 · SVG 系统图标
-
-## 下载安装
-
-从 [GitHub Releases](https://github.com/qingchencloud/cftunnel-app/releases) 下载对应平台的安装包：
-
-| 平台 | 文件 |
-|------|------|
-| macOS | `cftunnel-app-macos.zip` |
-| Windows | `cftunnel-app-windows.zip` |
-| Linux | `cftunnel-app-linux.tar.gz` |
-
-## 前置条件
-
-需要先安装 [cftunnel CLI](https://github.com/qingchencloud/cftunnel)：
-
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.sh | bash
-
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.ps1 | iex
-```
-
-## 架构
-
-```
-┌─────────────────────────────────┐
-│  React + TypeScript (前端 UI)    │
-├─────────────────────────────────┤
-│  Wails v2 (Go ↔ JS 桥接)       │
-├─────────────────────────────────┤
-│  Go 后端 (exec 调用 cftunnel)   │
-├─────────────────────────────────┤
-│  cftunnel CLI (本机已安装)       │
-└─────────────────────────────────┘
-```
-
-桌面客户端通过 `exec` 调用本机 cftunnel CLI，完全独立不耦合。
-
-## 开发
-
-```bash
-# 安装 Wails CLI
-go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-# 检查环境
-wails doctor
-
-# 开发模式（热重载）
-wails dev
-
-# 构建
-wails build
-
-# 运行测试
-go test -v ./...
-```
-
-## 构建产物
-
-| 平台 | 产物 | 大小 |
-|------|------|------|
-| macOS | `build/bin/cftunnel-app.app` | ~8MB |
-| Windows | `build/bin/cftunnel-app.exe` | ~8MB |
-| Linux | `build/bin/cftunnel-app` | ~8MB |
-
-## 技术栈
-
-- **后端**: Go + Wails v2
-- **前端**: React + TypeScript + Vite
-- **图标**: 内联 SVG (Lucide 风格，零依赖)
-- **CI**: GitHub Actions 三平台自动构建
-
-## 关联项目
-
-- [cftunnel](https://github.com/qingchencloud/cftunnel) — CLI 工具（本客户端的核心依赖）
-- [cftunnel 官网](https://cftunnel.qt.cool) — 产品介绍与下载
-- [社区讨论](https://linux.do/t/1636467) — Linux.do 讨论帖
-- [QQ 交流群](https://qm.qq.com/q/qUfdR0jJVS) — OpenClaw 交流群
-
-## License
-
-MIT
-
----
-
-由 [武汉晴辰天下网络科技有限公司](https://qingchencloud.com) 开源维护
+去掉程序升级检测。
