@@ -23,8 +23,12 @@ func main() {
 		MinHeight:        500,
 		BackgroundColour: &options.RGBA{R: 10, G: 10, B: 15, A: 255},
 		AssetServer:      &assetserver.Options{Assets: assets},
-		OnStartup:        app.startup,
-		Bind:             []interface{}{app},
+		
+		// --- 生命周期钩子 ---
+		OnStartup:  app.startup,  // 启动时清理旧进程
+		OnShutdown: app.shutdown, // 关闭时清理当前进程
+		
+		Bind: []interface{}{app},
 		Mac: &mac.Options{
 			TitleBar:             mac.TitleBarHiddenInset(),
 			WebviewIsTransparent: true,
