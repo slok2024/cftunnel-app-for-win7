@@ -2,6 +2,8 @@
 
 它将复杂的命令行操作封装成了直观、简洁的 Windows 桌面应用，旨在为用户提供“一键式”的内网穿透解决方案。
 
+<img width="932" height="706" alt="image" src="https://github.com/user-attachments/assets/d007b9cb-1d2a-41d8-9b09-1c7bf2c89c19" />
+
 通过 AI 修改官方代码，将程序做成绿色版；
 
 编译支持win7版本的内核及主程序；
